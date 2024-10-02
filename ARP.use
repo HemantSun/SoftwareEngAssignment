@@ -1,0 +1,187 @@
+model ARP
+
+class Customer
+    attributes
+        Id : String
+        firstName : String
+        lastName : String
+        address1 : String
+        address2 : String
+        city : String
+        state : String
+        zip : String
+        telHome : String
+        telWork : String
+end
+
+class ReceivablesAccount
+    attributes
+        number: String
+        currentBalance : Real init = 0
+        ThirtyDayBalance : Real init = 0
+        SixtyDayBalance : Real init = 0
+        NinetyDayBalance : Real init = 0
+        OneTwentyDayBalance : Real init = 0
+        collections : Real init = 0
+    operations
+        ProcessInvoices()
+        begin
+            for invoice in self.unprocessedInvoices do
+                self.currentBalance := self.currentBalance + invoice.amount;
+                insert(self, invoice) into Processed;
+                delete(self, invoice) from Unprocessed;
+            end
+        end
+
+        EndOfMonthUpdate()
+        begin
+            self.collections := self.collections + self.OneTwentyDayBalance;
+            self.OneTwentyDayBalance := self.NinetyDayBalance;
+            self.NinetyDayBalance := self.SixtyDayBalance;
+            self.SixtyDayBalance := self.ThirtyDayBalance;
+            self.ThirtyDayBalance := self.currentBalance;
+            self.currentBalance := 0;
+        end
+
+        CreateInvoice(invoice : Invoice )
+        begin
+            insert(self, invoice) into Unprocessed;
+        end
+    
+    statemachines
+        psm StatesOfInvoices
+        states 
+            CreateReceivablesAccount: initial
+            UnprocessedState
+            ProcessedState
+        transitions
+            CreateReceivablesAccount -> ProcessedState {create}
+            UnprocessedState -> ProcessedState {ProcessInvoices()}
+            UnprocessedState -> UnprocessedState {CreateInvoice()}
+            ProcessedState -> UnprocessedState {CreateInvoice()}
+            ProcessedState -> ProcessedState {ProcessInvoices()}
+        end
+end
+
+class Invoice
+    attributes
+        number : String
+        amount : Real
+end
+
+class ARProcessor
+    operations
+        InvoiceCreation(number : String, amount : Real, account : ReceivablesAccount)
+        begin
+            declare createInvoice : Invoice;
+            createInvoice := new Invoice;
+            createInvoice.number := number;
+            createInvoice.amount := amount;
+            account.CreateInvoice(createInvoice);
+        end
+
+        ProcessInvoices(arAccounts : Set(ReceivablesAccount))
+        begin
+            for AllAcc in arAccounts do
+                AllAcc.ProcessInvoices();
+            end
+        end
+
+        EndOfMonthUpdate(arAccounts : Set(ReceivablesAccount))
+        begin
+            for AllAcc in arAccounts do
+                AllAcc.EndOfMonthUpdate();
+            end
+        end
+
+    statemachines
+        psm AllStatesOfInvoices
+        states 
+            CreateApr: initial
+            UnprocessedState
+            ProcessedState
+        transitions
+            CreateApr -> ProcessedState {create}
+            UnprocessedState -> ProcessedState {ProcessInvoices()}
+            UnprocessedState -> UnprocessedState {InvoiceCreation()}
+            ProcessedState -> UnprocessedState {InvoiceCreation()}
+            ProcessedState -> ProcessedState {ProcessInvoices()}
+        end
+end
+
+association CusAccount between
+    ReceivablesAccount[0..1]
+    Customer[1] role customer
+end
+
+association Unprocessed between
+    ReceivablesAccount[0..1] role receivableUnprocessed
+    Invoice[0..*] role unprocessedInvoices
+end
+
+association Processed between
+    ReceivablesAccount[0..1] role receivableProcessed
+    Invoice[0..*] role processedInvoices
+end
+
+
+constraints
+
+------------------------------
+-- ReceivablesAccount invariants
+------------------------------
+-- An Invoice cannot be both unprocessed and processed.
+context ReceivablesAccount
+    inv InvCantProcAndUnproc: unprocessedInvoices->intersection(processedInvoices)->isEmpty()
+
+-- An invoice number must be six characters in length.
+context ReceivablesAccount
+    inv InvMustBeSix: self.number.size() = 6
+
+------------------------------
+-- ARProcessor :: ProcessInvoices pre-conditions
+------------------------------
+-- There must be some unprocessedInvoices.
+context ARProcessor :: ProcessInvoices(arAccounts : Set(ReceivablesAccount))
+    pre UnprocInvExists: arAccounts->exists(unprocessedInvoices->notEmpty())
+
+------------------------------
+-- ARProcessor :: ProcessInvoices post-conditions
+------------------------------
+-- unprocessedInvoices become processedInvoices
+context ARProcessor :: ProcessInvoices( arAccounts : Set(ReceivablesAccount))
+    post UnprocBecomeProc: arAccounts->forAll(
+    unprocessedInvoices->isEmpty() and
+    processedInvoices = processedInvoices@pre->union(unprocessedInvoices@pre)
+    )
+
+------------------------------
+-- ARProcessor :: EndOfMonthUpdate pre-conditions
+------------------------------
+-- There are no unprocessed invoices.
+context ARProcessor :: EndOfMonthUpdate(arAccounts : Set(ReceivablesAccount))
+    pre NoUnprocInvoices: arAccounts->forAll(unprocessedInvoices->isEmpty())
+
+------------------------------
+-- ARProcessor :: EndOfMonthUpdate post-conditions
+------------------------------
+-- For all of the arAccounts the following holds:
+-- The collections values is its previous values plus the previous OneTwentDayBalance and
+-- the OneTwentyDayBalance is the previous NinetyDayBalance and
+-- the NinetyDayBalance is the previous NinetyDayBalance and
+-- the SixtyDayBalance is the previous ThirtDayBalance and
+-- the ThirtyDayBalance is the previous currentBalance and
+-- the currentBalance is 0.
+
+context ARProcessor :: EndOfMonthUpdate(arAccounts : Set(ReceivablesAccount))
+    post UpdateValues: arAccounts->forAll(
+        currentBalance = 0 and
+        ThirtyDayBalance = currentBalance@pre and
+        SixtyDayBalance = ThirtyDayBalance@pre and
+        NinetyDayBalance = SixtyDayBalance@pre and
+        OneTwentyDayBalance = NinetyDayBalance@pre and
+        collections = collections@pre + OneTwentyDayBalance@pre
+    )
+
+
+

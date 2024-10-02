@@ -1,0 +1,22 @@
+!new ARProcessor('arp')
+
+!new Customer('Hemant')
+
+!Hemant.Id :='999999'
+!Hemant.firstName := 'Hemant Sundarrajan'
+!Hemant.lastName :='C22440886'
+!Hemant.telHome := '123456'
+!Hemant.telWork := '678910'
+!Hemant.address1 := '2 The Grove'
+!Hemant.address2 := 'Avery Drive'
+!Hemant.city := 'Dun Laoghaire'
+!Hemant.state := 'Dublin'
+!Hemant.zip := 'A65 YE53'
+
+!new ReceivablesAccount('HemantCurrAcc')
+!HemantCurrAcc.number := Hemant.Id;
+!insert(HemantCurrAcc, Hemant) into CusAccount
+
+!arp.InvoiceCreation('123456',100,HemantCurrAcc)
+!arp.ProcessInvoices(ReceivablesAccount.allInstances())
+!arp.EndOfMonthUpdate(ReceivablesAccount.allInstances())
