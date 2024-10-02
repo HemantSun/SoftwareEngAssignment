@@ -1,0 +1,1 @@
+This is my Software Engineering Assignment from 2nd Year. It involved recreating a class diagram along with the DbC (Design By Contract) constraint implementation of the Accounts Receivable Processor. This assignment required me to highlight how DbC approaches designing software, by utilising certain assertions i.e. preconditions, post conditions and invariants.
